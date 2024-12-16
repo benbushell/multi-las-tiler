@@ -1,5 +1,5 @@
 import json
-import sys
+import os
 import struct
 import math
 import time
@@ -7,6 +7,14 @@ import time
 def roundDown(x, base):
     return int(base * math.floor(math.floor(x)/base))
 
+def getDirName(filepath):
+    
+    i = filepath.rfind('/')
+    fileName = filepath[i:]
+    fileName = fileName[1:]
+    dirName = fileName[:-4]
+
+    return(dirName)
 
 def getFromBytes(filepath, pos, structCode, bytes):
     # Gets value at pos from with the python struct for the datatype and number of bytes.
@@ -120,10 +128,19 @@ class LasFile:
             
             st = time.time()
 
+#Export Files
+
+            dirName = getDirName(self.filePath)
+            dirPath = "tiles//"+dirName
+
+            if(not os.path.exists(dirPath)):
+                os.mkdir(dirPath)
+                
+            
             for name in points:
                 if (len(points[name]) > 100):
 
-                    with open("tiles//"+name+'.las', 'wb') as f_out:
+                    with open(dirPath+"//"+name+'.las', 'wb') as f_out:
                         f_out.write(header)
                         for p in points[name]:
                             f_out.write(p)
@@ -153,6 +170,16 @@ class LasFile:
                             }))
 
 
-f = LasFile('.//test_files//A_NB_111124-120241111225516-000#2.las')
-print('files running')
-f.tileArr(25)
+testPath = './/test_files//A_NB_111124-120241111225516-000#0.las'
+testPath2 = './/test_files//A_NB_111124-120241111225516-000#0'
+
+pathList = [
+    'test_files//A_NB_111124-120241111225516-000#0.las',
+    'test_files//A_NB_111124-120241111225516-000#1.las',
+    'test_files//A_NB_111124-120241111225516-000#2.las',
+]
+
+for testPath in pathList:
+    f = LasFile(testPath)
+    print('files running')
+    f.tileArr(25)
