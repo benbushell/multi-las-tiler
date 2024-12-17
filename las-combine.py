@@ -1,0 +1,257 @@
+import json
+import os
+import struct
+import math
+import time
+
+def roundDown(x, base):
+    return int(base * math.floor(math.floor(x)/base))
+
+def getDirName(filepath):
+    
+    i = filepath.rfind('/')
+    fileName = filepath[i:]
+    fileName = fileName[1:]
+    dirName = fileName[:-4]
+
+    return(dirName)
+
+def getFromBytes(filepath, pos, structCode, bytes):
+    # Gets value at pos from with the python struct for the datatype and number of bytes.
+    with open(filepath, 'rb', buffering=0) as f:
+        f.seek(pos)
+        char = f.read(bytes)
+        d = struct.unpack(structCode, char)
+        return (d[0])
+
+def createFileName(x,y):
+    return("Tile_X+"+str(x).zfill(8)+"_Y+"+str(y).zfill(8))
+
+class scaleOffset:
+    def __init__(self, filePath, pos):
+        self.x = getFromBytes(filePath, pos, 'd', 8)
+        self.y = getFromBytes(filePath, pos+8, 'd', 8)
+        self.z = getFromBytes(filePath, pos+16, 'd', 8)
+
+    def __str__(self):
+        return f"{self.x},{self.y},{self.z}"
+
+
+class minMax:
+    def __init__(self, filePath, pos):
+        self.x = getFromBytes(filePath, pos, 'd', 8)
+        self.y = getFromBytes(filePath, pos+16, 'd', 8)
+        self.z = getFromBytes(filePath, pos+32, 'd', 8)
+
+    def __str__(self):
+        return f"{self.x},{self.y},{self.z}"
+
+
+class PointRecord:
+    def __init__(self, pos, header):
+        with open(header.filePath, 'rb', buffering=0) as f:
+            f.seek(pos)
+            b = f.read(36)
+            self.pr = struct.unpack('lllHBBBBhHdHHH', b)
+            self.x = (getFromBytes(header.filePath, pos, 'l', 4)
+                      * header.scale.x) + header.offset.x
+            self.y = (getFromBytes(header.filePath, pos+4, 'l', 4)
+                      * header.scale.y) + header.offset.y
+            self.z = (getFromBytes(header.filePath, pos+8, 'l', 4)
+                      * header.scale.z) + header.offset.z
+
+    def __str__(self):
+        return f"{self.x},{self.y},{self.z}"
+
+
+class LasFile:
+    def __init__(self, filePath):
+        self.filePath = filePath
+        self.pointRecords = getFromBytes(filePath, 107, 'L', 4) #format < 6
+        # self.pointRecords = getFromBytes(filePath, 247, 'L', 4)  # format > 5
+        self.pointRecordFormat = getFromBytes(filePath, 104, 'B', 1)
+        self.pointRecordOffset = getFromBytes(filePath, 96, 'L', 4)
+        self.pointRecordLength = getFromBytes(filePath, 105, 'H', 2)
+        self.scale = scaleOffset(filePath, 131)
+        self.offset = scaleOffset(filePath, 155)
+        self.min = minMax(filePath, 187)
+        self.max = minMax(filePath, 179)
+
+    def pointRecord(self, pos):
+        return PointRecord(pos, self)
+
+    def tileArr(self, tilesize):
+
+        with open(self.filePath, "rb") as f:
+
+            header = f.read()[:self.pointRecordOffset]
+
+            hd = max(self.max.x - self.min.x, self.max.y - self.min.y)
+            # print('Boundary Width : ', hd*2)
+
+            points = {}
+
+            f.seek(self.pointRecordOffset)
+            count = 0
+            st = time.time()
+            while True:
+                # reads one point record at a time based off pointRecordLength.
+                b = f.read(self.pointRecordLength)
+                if b:
+                    pr = struct.unpack('lllHBBbBH', b) #Format 0
+                    # pr = struct.unpack(
+                    #     'lllxxxxxxxxxxxxxxxxxxxxxxxx', b)  # Format 7
+                    x = (pr[0]*self.scale.x)+self.offset.x
+                    y = (pr[1]*self.scale.y)+self.offset.y
+                    count += 1
+
+                    xTile = roundDown(x,25)
+                    yTile = roundDown(y,25)
+                   
+                    filename = createFileName(xTile,yTile)
+                    
+                    if filename in points.keys(): 
+                        points[filename].append(b)
+                    else:
+                        points[filename]=[b]
+
+                else:
+                    break
+
+            et = time.time()
+
+
+            print('Points sorted in ',round(et-st), ' seconds')
+            print('Records : ', count)
+
+            
+            st = time.time()
+
+#Export Files
+
+            dirName = getDirName(self.filePath)
+            dirPath = "tiles//"+dirName
+
+            if(not os.path.exists(dirPath)):
+                os.mkdir(dirPath)
+                
+            
+            for name in points:
+                if (len(points[name]) > 100):
+
+                    with open(dirPath+"//"+name+'.las', 'wb') as f_out:
+                        f_out.write(header)
+                        for p in points[name]:
+                            f_out.write(p)
+
+                        f_out.seek(107)  # Point format 7
+                        newhex = struct.pack(
+                            'QL', len(points[name]), len(points[name]))  # Point Format 7
+                        f_out.write(newhex)
+
+            et = time.time()
+            
+            print('Files created in ',round(et-st),' seconds')
+
+
+
+    def __str__(self):
+
+        return (json.dumps({'filepath': self.filePath,
+                            'pointRecordFormat': self.pointRecordFormat,
+                            'pointRecords': self.pointRecords,
+                            'pointRecordOffset': self.pointRecordFormat,
+                            'pointRecordLength': self.pointRecordLength,
+                            'scale': {'x': self.scale.x, 'y': self.scale.y, 'z': self.scale.z},
+                            'offset': {'x': self.offset.x, 'y': self.offset.y, 'z': self.offset.z},
+                            'min': {'x': self.min.x, 'y': self.min.y, 'z': self.min.z},
+                            'max': {'x': self.max.x, 'y': self.max.y, 'z': self.max.z}
+                            }))
+
+def combineLas(file1,file2):
+    
+    print('hi')
+    
+    with open(file1.filePath, "rb") as f:
+
+        header = f.read()[:file1.pointRecordOffset];
+
+        points = {};
+
+        f.seek(file1.pointRecordOffset)
+        count = 0
+
+        st = time.time()
+        while True:
+            # reads one point record at a time based off pointRecordLength.
+            b = f.read(file1.pointRecordLength)
+            if b:
+                pr = struct.unpack('lllHBBbBH', b) #Format 0
+                # pr = struct.unpack(
+                #     'lllxxxxxxxxxxxxxxxxxxxxxxxx', b)  # Format 7
+                x = (pr[0]*file1.scale.x)+file1.offset.x
+                y = (pr[1]*file1.scale.y)+file1.offset.y
+                z = (pr[2]*file1.scale.z)+file1.offset.z
+
+                count += 1
+
+                
+
+                with open(file2.filePath,'ab') as f2:
+                    newX = round((x-file2.offset.x)/file2.scale.x)
+                    newY = round((y-file2.offset.y)/file2.scale.y)
+                    newZ = round((z-file2.offset.z)/file2.scale.z)
+
+                    xyz = struct.pack('lll', newX, newY, newZ)
+
+                    print(pr[0], newX)
+                    print(b)
+
+                    ba = bytearray(b)
+                    print(ba)
+
+                    newBin = struct.pack_into('lll',b,0,newX,newY,newZ)
+                    
+                    
+                    
+                with open(file2.filePath,'wb') as f3:
+                    f3.seek(107)  # Point format 7
+                    newTotal = file1.pointRecords + file2.pointRecords
+                    newhex = struct.pack('QL', newTotal, newTotal) # Point Format 7
+                    f3.write(newhex)
+            
+            else:
+                break
+
+        et = time.time()
+
+
+        print('Points sorted in ',round(et-st), ' seconds')
+        print('Records : ', count)
+
+    
+    
+    
+
+
+testPath = './/test_files//A_NB_111124-120241111225516-000#0.las'
+testPath2 = './/test_files//A_NB_111124-120241111225516-000#0'
+
+pathList = [
+    'test_files//A_NB_111124-120241111225516-000#0.las',
+    'test_files//A_NB_111124-120241111225516-000#1.las',
+    'test_files//A_NB_111124-120241111225516-000#2.las',
+]
+
+path1 = 'test_files//A_NB_111124-120241111225516-000#0.las'
+path2 = 'test_files//A_NB_111124-120241111225516-000#1.las'
+
+las1 = LasFile(path1)
+las2 = LasFile(path2)
+
+combineLas(las1, las2)
+
+# for testPath in pathList:
+#     f = LasFile(testPath)
+#     print('files running')
+#     f.tileArr(25)
