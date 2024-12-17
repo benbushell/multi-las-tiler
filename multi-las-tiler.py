@@ -181,4 +181,4 @@ pathList = [
 for testPath in pathList:
     f = LasFile(testPath)
     print('files running')
-    f.tileArr(25)
+    # f.tileArr(25)

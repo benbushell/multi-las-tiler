@@ -249,7 +249,7 @@ path2 = 'test_files//A_NB_111124-120241111225516-000#1.las'
 las1 = LasFile(path1)
 las2 = LasFile(path2)
 
-combineLas(las1, las2)
+# combineLas(las1, las2)
 
 # for testPath in pathList:
 #     f = LasFile(testPath)
