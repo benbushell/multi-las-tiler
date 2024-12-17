@@ -67,8 +67,8 @@ class PointRecord:
 class LasFile:
     def __init__(self, filePath):
         self.filePath = filePath
-        self.pointRecords = getFromBytes(filePath, 107, 'L', 4) #format < 6
-        # self.pointRecords = getFromBytes(filePath, 247, 'L', 4)  # format > 5
+        # self.pointRecords = getFromBytes(filePath, 107, 'L', 4) #format < 6
+        self.pointRecords = getFromBytes(filePath, 247, 'L', 4)  # format > 5
         self.pointRecordFormat = getFromBytes(filePath, 104, 'B', 1)
         self.pointRecordOffset = getFromBytes(filePath, 96, 'L', 4)
         self.pointRecordLength = getFromBytes(filePath, 105, 'H', 2)
@@ -124,7 +124,6 @@ class LasFile:
             print('Points sorted in ',round(et-st), ' seconds')
             print('Records : ', count)
 
-            print(points.keys())
             
             st = time.time()
 
@@ -145,7 +144,7 @@ class LasFile:
                         for p in points[name]:
                             f_out.write(p)
 
-                        f_out.seek(107)  # Point format 7
+                        f_out.seek(247)  # Point format 7
                         newhex = struct.pack(
                             'QL', len(points[name]), len(points[name]))  # Point Format 7
                         f_out.write(newhex)
